@@ -1,7 +1,8 @@
 fund.classes <- read.csv("~/GitHub/option-based-funds-paper/fund classes.csv", stringsAsFactors=FALSE)
 names(fund.classes) <- c("lowVol","lowVolBench","miscBench","threeFundPort","enhancedRet","assetAlloc")
 allFunds <- read.csv("~/GitHub/option-based-funds-paper/allfunds.csv", stringsAsFactors=FALSE,header=FALSE)
-
+toDate <- function(x) as.Date(x, origin = "1899-12-30")
+extraTickers<- read.zoo("~/GitHub/option-based-funds-paper/paper data.csv",header=TRUE,sep=",",FUN = toDate)
 require(quantmod)
 require(plyr)
 
@@ -23,7 +24,7 @@ for(i in 1:length(allFunds[,1]))
   }
   if(i > 1)
   {
-    allPrices <- na.omit(merge(allPrices,price))
+    allPrices <- merge(allPrices,price)
   }
 }
 
@@ -32,7 +33,8 @@ tfp <- (1000/as.numeric(allPrices$VBMFX.Adjusted[1]))*allPrices$VBMFX.Adjusted+
   (1000/as.numeric(allPrices$VGTSX.Adjusted[1]))*allPrices$VGTSX.Adjusted
 names(tfp) <- "tfp"
 allPrices <- na.omit(merge(allPrices,tfp))
-
+xtra <- as.xts(extraTickers)
+allPrices <- na.omit(merge(allPrices,xtra))
 calcRet <- function(pr)
 {
   dailyReturn(pr,leading=FALSE)
@@ -44,19 +46,46 @@ meanReturn <- adply(allReturns,2,mean,na.rm=TRUE)
 stdReturn <- adply(allReturns,2,sd,na.rm=TRUE)
 summaryTable <- cbind(meanReturn,stdReturn[,2],maxDrawDown[,2],highestReturn[,2])
 names(summaryTable) <- c("name","mean","sd","low","high")
-
+summaryTable$name <- c(allFunds[,1],"TFP",names(xtra))
 View(summaryTable)
 
+# plot all funds risk return
+ggplot(summaryTable) +
+  geom_point(aes(x=sd,y=mean)) +
+  geom_text(aes(x=sd,y=mean,label=name),size=4,hjust=0,vjust=0) +
+  labs(title = "Return vs Risk - All Funds") +
+  ylab("Mean Daily Return") +
+  xlab("Daily Standard Deviation") 
+  
+  
+write.csv(summaryTable,file="~/GitHub/option-based-funds-paper/table.csv")
+table <- read.csv("~/GitHub/option-based-funds-paper/table.csv", stringsAsFactors=FALSE)
+table2 <- table[,-1]
 
-# Determine number of clusters
-wss <- (nrow(t(na.omit(allReturns)))-1)*sum(apply(t(na.omit(allReturns)),2,var))
-for (i in 2:15) wss[i] <- sum(kmeans(t(na.omit(allReturns)), 
-                                     centers=i)$withinss)
-plot(1:15, wss, type="b", xlab="Number of Clusters",
-     ylab="Within groups sum of squares")
-# K-Means Cluster Analysis
-fit <- kmeans(t(na.omit(allReturns)), 3) # 5 cluster solution
-# get cluster means 
-aggregate(mydata,by=list(fit$cluster),FUN=mean)
-# append cluster assignment
-mydata <- data.frame(mydata, fit$cluster)
+#calc information ratio
+infr <- t(InformationRatio(allReturns,cbind(allReturns[,16:20],allReturns[,32:36]),scale=252))
+sum2 <- cbind(summaryTable,infr)
+
+lvGroup <- sum2[which(table2[,6]!=2),]
+
+# plot all funds risk return
+ggplot(lvGroup) +
+  geom_point(aes(x=sd,y=mean)) +
+  geom_text(aes(x=sd,y=mean,label=name),size=4,hjust=0,vjust=0) +
+  labs(title = "Return vs Risk - Low Volatility Funds") +
+  ylab("Mean Daily Return") +
+  xlab("Daily Standard Deviation")
+
+erGroup <- sum2[which(table2[,6]!=1),]
+
+# plot all funds risk return
+ggplot(erGroup) +
+  geom_point(aes(x=sd,y=mean)) +
+  geom_text(aes(x=sd,y=mean,label=name),size=4,hjust=0,vjust=0) +
+  labs(title = "Return vs Risk - Enhanced Return Funds") +
+  ylab("Mean Daily Return") +
+  xlab("Daily Standard Deviation")
+
+write.csv(lvGroup,file="~/GitHub/option-based-funds-paper/lvGroup.csv")
+write.csv(erGroup,file="~/GitHub/option-based-funds-paper/erGroup.csv")
+
